@@ -1,0 +1,782 @@
+---
+title: "Assignment 3"
+author: "Shicong Wang"
+date: "11/8/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(
+  "ggplot2",
+  "knitr",
+  "arm",
+  "foreign",
+  "faraway",
+  "nnet",
+  "VGAM",
+  "MASS",
+  "rstanarm",
+  "magrittr",
+  "dplyr",
+  "reshape2",
+  "stats",
+  "tidyverse", 
+  "rvest",
+  "xts"
+)
+```
+
+## Read data
+
+```{r cars}
+library(drat)
+addRepo("geanders")
+data("hurr_tracks")
+
+library(hurricaneexposuredata)
+library(tidyverse)
+library(drat)
+library(hurricaneexposure)
+data("hurr_tracks")
+data("storm_events")
+
+hurr_tracks %>% 
+  filter(storm_id == 'Ike-2008')
+
+map_counties(storm = "Ike-2008", metric = "rainfall") 
+map_counties(storm = "Ike-2008", metric = "wind")
+map_counties(storm = "Ike-2008", metric = "distance")
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(hrbrthemes)
+library(xts)
+library(lubridate)
+library(dygraphs)
+#library(geoR)
+
+
+capl1 <- read_table('https://www.ndbc.noaa.gov/view_text_file.php?filename=capl1h2008.txt.gz&dir=data/historical/stdmet/', col_names = TRUE)
+port2 <- read_table('https://www.ndbc.noaa.gov/view_text_file.php?filename=port2h2008.txt.gz&dir=data/historical/stdmet/', col_names = TRUE)
+a42001 <- read_table('https://www.ndbc.noaa.gov/view_text_file.php?filename=42001h2008.txt.gz&dir=data/historical/stdmet/', col_names = TRUE)
+
+capl1 <- capl1[-1, ]
+port2 <- port2[-1, ]
+a42001 <- a42001[-1, ]
+
+capl1$DATE <- paste0(capl1$`#YY`,'-',capl1$MM, '-', capl1$DD)
+port2$DATE <- paste0(port2$`#YY`,'-',port2$MM, '-', port2$DD)
+a42001$DATE <- paste0(a42001$`#YY`,'-',a42001$MM, '-', a42001$DD)
+
+capl1$DATE <- as.Date(capl1$DATE)
+port2$DATE <- as.Date(port2$DATE)
+a42001$DATE <- as.Date(a42001$DATE)
+
+#every 6 min
+capl1_sub <- capl1 %>% filter(DATE >= '2008-09-11' & DATE <= '2008-09-18')
+#every hour
+port2_sub <- port2 %>% filter(DATE >= '2008-09-11' & DATE <= '2008-09-18')
+a42001_sub <- a42001 %>% filter(DATE >= '2008-09-11' & DATE <= '2008-09-18')
+
+capl1_sub$WDIR <- as.numeric(capl1_sub$WDIR)
+capl1_sub$WSPD <- as.numeric(capl1_sub$WSPD)
+capl1_sub$GST <- as.numeric(capl1_sub$GST)
+
+port2_sub$WDIR <- as.numeric(port2_sub$WDIR)
+port2_sub$WSPD <- as.numeric(port2_sub$WSPD)
+port2_sub$GST <- as.numeric(port2_sub$GST)
+
+a42001_sub$WDIR <- as.numeric(a42001_sub$WDIR)
+a42001_sub$WSPD <- as.numeric(a42001_sub$WSPD)
+a42001_sub$GST <- as.numeric(a42001_sub$GST)
+
+capl1_sub$TIME <- paste0(capl1_sub$DATE,' ',capl1_sub$hh,":",capl1_sub$mm,':00' )
+capl1_sub$TIME<- as.POSIXct(capl1_sub$TIME)
+port2_sub$TIME <- paste0(port2_sub$DATE,' ',port2_sub$hh,":",port2_sub$mm,':00' )
+port2_sub$TIME<- as.POSIXct(port2_sub$TIME)
+a42001_sub$TIME <- paste0(a42001_sub$DATE,' ',a42001_sub$hh,":",a42001_sub$mm,':00' )
+a42001_sub$TIME<- as.POSIXct(a42001_sub$TIME)
+
+capl1_sub$WSPD[capl1_sub$WSPD == " 99.0"] <- "1.2"
+capl1_sub$WSPD <- as.numeric(capl1_sub$WSPD)
+capl1_sub$WSPD
+
+wind <- xts(x=capl1_sub$WSPD, order.by=capl1_sub$TIME)
+plot(wind)
+
+wind2 <- xts(x=port2_sub$WSPD, order.by=port2_sub$TIME)
+plot(wind2)
+
+wind3 <- xts(x=a42001_sub$WSPD, order.by=a42001_sub$TIME)
+
+
+dygraph(wind2,main = "Hurricane wind speed observed by buoy port2") %>%
+  dyOptions(stackedGraph = TRUE) %>%
+  dyRangeSelector(height = 20)
+
+dygraph(wind,main = "Hurricane wind speed observed by buoy capl1") %>%
+  dyOptions(stackedGraph = TRUE) %>%
+  dyRangeSelector(height = 20)
+
+dygraph(wind3,main = "Hurricane wind speed observed by buoy capl1") %>%
+  dyOptions(stackedGraph = TRUE) %>%
+  dyRangeSelector(height = 20)
+
+port2_sub %>% 
+  ggplot( aes(x=TIME, y=WSPD)) +
+    geom_line(color="#69b3a2") +
+    annotate(geom="text", x=as.POSIXct("2008-09-13 07:00:00"), y=24,label="The highest point at around 6:00 am in Sep 13") +
+    annotate(geom="point", x=as.POSIXct("2008-09-13 07:00:00"), y=21.4, size=10, shape=21, fill="transparent") +
+    geom_hline(yintercept=median(port2_sub$WSPD), color="orange", size=.5) +
+    theme_ipsum()
+
+a42001_sub %>%
+ ggplot( aes(x=TIME, y=WSPD)) +
+    geom_line(color="#69b3a2") +
+    annotate(geom="text", x=as.POSIXct("2008-09-13 07:00:00"), y=34,label="The highest point at around 2:50 am in Sep 12") +
+    annotate(geom="point", x=as.POSIXct("2008-09-12 02:50:00"), y=30.1, size=10, shape=21, fill="transparent") +
+    geom_hline(yintercept=median(a42001_sub$WSPD), color="orange", size=.5) +
+    theme_ipsum()
+
+capl1_sub %>% 
+  ggplot( aes(x=TIME, y=WSPD)) +
+    geom_line(color="#69b3a2") +
+    #annotate(geom="text", x=as.POSIXct("2008-09-13 07:00:00"), y=10.1,label="The highest point at around 2:50 am") +
+    #annotate(geom="point", x=as.POSIXct("2008-09-13 07:00:00"), y=10.1, size=10, shape=21, fill="transparent") +
+    geom_hline(yintercept=median(capl1_sub$WSPD), color="orange", size=.5) +
+    theme_ipsum()
+```
+`
+```{r}
+srst2 <- read_table('https://www.ndbc.noaa.gov/view_text_file.php?filename=srst2h2008.txt.gz&dir=data/historical/stdmet/', col_names = TRUE)
+gnjt2 <- read_table('https://www.ndbc.noaa.gov/view_text_file.php?filename=gnjt2h2008.txt.gz&dir=data/historical/stdmet/', col_names = TRUE)
+rlot2 <- read_table('https://www.ndbc.noaa.gov/view_text_file.php?filename=rlot2h2008.txt.gz&dir=data/historical/stdmet/', col_names = TRUE)
+
+srst2 <- srst2[-1, ]
+gnjt2 <- gnjt2 [-1, ]
+rlot2 <- rlot2[-1, ]
+
+srst2$DATE <- paste0(srst2$`#YY`,'-',srst2$MM, '-',srst2$DD)
+gnjt2$DATE <- paste0(gnjt2$`#YY`,'-',gnjt2$MM, '-',gnjt2$DD)
+rlot2$DATE <- paste0(rlot2$`#YY`,'-',rlot2$MM, '-',rlot2$DD)
+
+srst2$DATE <- as.Date(srst2$DATE)
+gnjt2$DATE <- as.Date(gnjt2$DATE)
+rlot2$DATE <- as.Date(rlot2$DATE)
+
+srst2_sub <- srst2 %>% filter(DATE >= '2008-09-11' & DATE <= '2008-09-18')
+gnjt2_sub <- gnjt2 %>% filter(DATE >= '2008-09-11' & DATE <= '2008-09-18')
+rlot2_sub <- rlot2 %>% filter(DATE >= '2008-09-11' & DATE <= '2008-09-18')
+
+srst2_sub$WSPD <- as.numeric(srst2_sub$WSPD)
+gnjt2_sub$WSPD <- as.numeric(gnjt2_sub$WSPD)
+rlot2_sub$WSPD <- as.numeric(rlot2_sub$WSPD)
+
+srst2_sub$TIME <- paste0(srst2_sub$DATE,' ',srst2_sub$hh,":",srst2_sub$mm,':00' )
+srst2_sub$TIME<- as.POSIXct(srst2_sub$TIME)
+gnjt2_sub$TIME <- paste0(gnjt2_sub$DATE,' ',gnjt2_sub$hh,":",gnjt2_sub$mm,':00' )
+gnjt2_sub$TIME<- as.POSIXct(gnjt2_sub$TIME)
+rlot2_sub$TIME <- paste0(rlot2_sub$DATE,' ',rlot2_sub$hh,":",rlot2_sub$mm,':00' )
+rlot2_sub$TIME<- as.POSIXct(rlot2_sub$TIME)
+
+srst2_dt <- srst2_sub %>% filter(TIME == '2008-09-13 03:00:00')
+gnjt2_dt <- gnjt2_sub %>% filter(TIME == '2008-09-13 02:54:00')
+rlot2_dt <- rlot2_sub %>% filter(TIME == '2008-09-13 03:00:00')
+
+
+capl1_dt <- capl1_sub %>% filter(TIME == '2008-09-13 03:00:00')
+port2_dt <- port2_sub %>% filter(TIME == '2008-09-13 03:00:00')
+a42001_dt <- a42001_sub %>% filter(TIME == '2008-09-13 02:50:00')
+srst2_dt <- srst2_sub %>% filter(TIME == '2008-09-13 03:00:00')
+gnjt2_dt <- gnjt2_sub %>% filter(TIME == '2008-09-13 02:54:00')
+rlot2_dt <- rlot2_sub %>% filter(TIME == '2008-09-13 03:00:00')
+
+
+dat <- data.frame(bouys = c('capl1','port2','a42001','srst2','gnjt2','rlot2' ), wind = c(capl1_dt$WSPD, 
+                                                                                  port2_dt$WSPD,
+                                                                                  a42001_dt$WSPD,
+                                                                                  srst2_dt$WSPD,
+                                                                                  gnjt2_dt$WSPD,
+                                                                                  rlot2_dt$WSPD))
+
+
+dat$lat <- c(29.768,29.867, 25.942, 29.683, 29.357,29.515 )
+dat$long <- c(93.343,93.931,89.657, 94.033,94.725,94.513)
+
+
+
+as.geodata(dat, coords.col = 3:4, data.col = 2)
+
+
+```
+
+```{r}
+data("storm_events")
+event<- storm_events$`Ike-2008`
+dat<- unnest(event, events)
+
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+
+# IKE
+W.df <- best.use
+# W.df = subset(best.use, Yr==2008  & WmaxS >= 34 & Type=="*")
+W.df$name <- gsub(" ", "",W.df$name)  # drop black " " 
+W.df = W.df %>%
+  filter(name == "IKE")
+
+W.df$WmaxS = W.df$WmaxS * .5144
+
+
+ch = nrow(W.df)
+require(sp)
+W.sdf = W.df[c("Sid", "lon", "lat", "WmaxS")]
+coordinates(W.sdf) = c("lon", "lat")
+
+str(W.sdf, max.level=2, strict.width="cut")
+
+summary(W.sdf)
+ll = "+proj=longlat +datum=WGS84"
+proj4string(W.sdf) = CRS(ll)
+slot(W.sdf, "proj4string")
+
+
+lcc = "+proj=lcc +lat_1=60 +lat_2=30 +lon_0=-60"
+require(rgdal)
+W.sdf = spTransform(W.sdf, CRS(lcc))
+bbox(W.sdf)
+
+set.seed(3042)
+bb = bbox(W.sdf)
+bb[1, 1:2] = bb[1, 1:2] * 1.15
+bb[2, 2] = bb[2, 2] * 1.15
+bb[2, 1] = bb[2, 1] * .8
+hpt = spsample(W.sdf, type="hexagonal", n=250, bb=bb, offset=c(.5, .5))
+
+hpg = HexPoints2SpatialPolygons(hpt)
+plot(hpg)
+plot(W.sdf, pch=20, cex=.3, add=TRUE)
+
+np = length(hpg@polygons)
+area = hpg@polygons[[1]]@area
+np; area
+
+hexid = over(x=W.sdf, y=hpg)
+W.sdf$hexid = hexid
+
+require(plyr)
+perHexStats = ddply(W.sdf@data, .(hexid), summarize,
+                    count = length(Sid),
+                    hct = length(unique(Sid)),
+                    WmaxS = max(WmaxS))
+
+ID = paste("ID", perHexStats$hexid, sep="")
+row.names(perHexStats) = ID
+hspdf = SpatialPolygonsDataFrame(hpg[ID], perHexStats, match.ID = TRUE)
+head(slot(hspdf, "data"))
+
+l1 = list("sp.points", W.sdf, pch=20, col="gray", cex=.3)
+require(maps)
+require(maptools)
+cl = map("world", xlim=c(-120, 20), ylim=c(-10, 70), plot=FALSE)
+clp = map2SpatialLines(cl, proj4string=CRS(ll))
+clp = spTransform(clp, CRS(lcc))
+l2 = list("sp.lines", clp, col="gray")
+
+require(colorRamps)
+cr = blue2yellow(20)
+
+require(grid)
+p1 = spplot(hspdf, "count", col="white", col.regions=blue2yellow(20),
+            sp.layout=list(l1, l2), at=seq(0, 40, 5),
+            colorkey=list(space="bottom", labels=list(labels=paste(seq(0, 40, 5)), cex=.8)),
+            sub=list("Cyclone hours", cex=.8, font=1))
+p2 = spplot(hspdf, "WmaxS", col="white", col.regions=blue2red(20),
+            sp.layout=list(l2), at=seq(10, 90, 10),
+            colorkey=list(space="bottom", labels=list(labels=paste(seq(10, 90, 10)), cex=.8)),
+            sub=list("Highest intensity [m/s]", cex=.8, font=1))
+p1 = update(p1, main=textGrob("a", x=unit(.05, "npc")))
+p2 = update(p2, main=textGrob("b", x=unit(.05, "npc")))
+print(p1, split=c(1, 1, 1, 2), more=TRUE)
+print(p2, split=c(1, 2, 1, 2), more=FALSE)
+```
+```{r}
+library(dplyr)
+library(stringr)
+library(sp) 
+library(gstat) 
+library(tmap)
+library(sf)
+library(tidyverse)
+library(magrittr)
+library(rgdal)
+
+v = variogram(WmaxS ~ 1, data = W.sdf)
+par(las = 1)
+
+plot(v$dist/1000, v$gamma, xlim = c(0, 2200), ylim = c(0, 220), xlab = "Lagged distance (h) [km]", 
+    ylab = expression(paste("Semivariance (", gamma, ") [", cm^2, "]")), las = 1, 
+    pch = 19) +
+grid()+
+points(v$dist/1000, v$gamma, pch = 19)+
+text(v$dist/1000, v$gamma, pos = 1, labels = as.character(v$np), cex = 0.5)
+
+vmi = vgm(model = "Gau", psill = 6, range = 200*1000, nugget =1)
+v.fit = fit.variogram(v, vmi)
+v.fit
+nug = v.fit$psill[1]
+ps = v.fit$psill[2]
+r = v.fit$range[2]/1000
+h = seq(0, 2400, 0.2)
+fit = ps * (1 - exp(-h^2/(r^2))) + nug
+plot(v$dist/1000, v$gamma, xlim = c(0, 2200), ylim = c(0, 220), xlab = "Lag distance (h) [km]", 
+    ylab = expression(paste("Semivariance (", gamma, ") [", cm^2, "]")), las = 1, 
+    pch = 19)+
+grid()+
+lines(h, fit, lwd = 2)
+
+
+vmi2 = vgm(model = "Sph", psill = 6, range = 200*1000, nugget = 1)
+v2.fit = fit.variogram(v, vmi2)
+plot(v, v2.fit)
+
+```
+
+```{r}
+library(maptools) 
+library(hurricaneexposuredata)
+require(maptools)
+library(sf)
+# IKE
+W.df1 <- best.use
+# W.df = subset(best.use, Yr==2008  & WmaxS >= 34 & Type=="*")
+W.df1$name <- gsub(" ", "",W.df1$name)  # drop black " " 
+W.df1 = W.df1 %>%
+  filter(name == "IKE")
+
+W.df1$WmaxS = W.df1$WmaxS * .5144
+
+
+ch = nrow(W.df1)
+require(sp)
+W.sdf1 = W.df1[c("Sid", "lon", "lat", "WmaxS")]
+coordinates(W.sdf1) = c("lon", "lat")
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(W.sdf1) = CRS(ll2)
+summary(W.sdf1$WmaxS)
+
+
+v = variogram(WmaxS ~ 1, data = W.sdf1)
+vmi = vgm(model='Gau', psill=150, range=200*1000,nugget=50)
+v.fit = fit.variogram(v, vmi)
+v.fit
+plot(v, v.fit)
+#county <- st_read("UScounties.shp",quiet = TRUE)
+USpoly = readShapeSpatial("UScounties.shp", proj4string = CRS(ll2))
+require(rgdal)
+aea = "+proj=aea +lat_1=23 +lat_2=30 +lat_0=26, +lon_0=-83 +units=m"
+US = spTransform(W.sdf1, CRS(aea))
+USpoly = spTransform(USpoly, CRS(aea))
+
+l3 = list("sp.polygons", USpoly, lwd = 0.3, first = FALSE)
+spplot(W.sdf1, "WmaxS", sp.layout = l3)
+
+
+##########################
+
+grd = spsample(USpoly, n = 5000, type = "regular")
+grd = as(grd, "SpatialPixels")
+ipl = krige(WmaxS ~ 1, W.sdf1, newdata = grd, model = v.fit)
+spplot(ipl, "var1.pred", col.regions = rev(topo.colors(20)), sp.layout = l3,)
+```
+
+```{r}
+data('county_centers')
+#rain data
+rain_dat <- rain %>% filter(storm_id == 'Ike-2008')
+
+comb_rain <- merge(rain_dat, county_centers, by = 'fips', all.x = TRUE)
+head(comb_rain)
+table(comb_rain$lag)
+#try from lag = -5
+comb_rain <- comb_rain %>% filter(lag == -5)
+coordinates(comb_rain) = c('longitude', 'latitude')
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(comb_rain) = CRS(ll2)
+comb_rain$precip_max = comb_rain$precip_max /10
+summary(comb_rain$precip_max)
+
+
+v = variogram(precip_max ~ 1, data=comb_rain)
+plot(v)
+show.vgms()
+
+vmi = vgm(model='Gau', psill=0.006, range=1000*0.005,nugget=0.003)
+v.fit = fit.variogram(v, vmi)
+v.fit
+
+
+#try from lag = 0
+#comb_rain <- comb_rain %>% filter(lag == 0)
+#coordinates(comb_rain) = c('longitude', 'latitude')
+#ll2 = '+proj=longlat +datum=NAD83'
+#proj4string(comb_rain) = CRS(ll2)
+#comb_rain$precip_max = comb_rain$precip_max /10
+#summary(comb_rain$precip_max)
+
+
+v = variogram(precip_max ~ 1, data=comb_rain)
+par(las = 1)
+plot(v$dist/1000, v$gamma, xlab = "Lagged distance (h) [km]", 
+     ylab = expression(paste("Semivariance (", gamma, ") [", cm^2, "]")), las = 1, 
+     pch = 19)
+grid()
+points(v$dist/1000, v$gamma, pch = 19)
+text(v$dist/1000, v$gamma, pos = 1, labels = as.character(v$np), cex = 0.5)
+
+
+show.vgms()
+
+vmi = vgm(model='Gau', psill=6, range=1000*4,nugget=1)
+v.fit = fit.variogram(v, vmi)
+v.fit
+plot(v, v.fit)
+
+
+vmi = vgm(model='Sph', psill=6, range=1000*4,nugget=1)
+v.fit = fit.variogram(v, vmi)
+v.fit
+plot(v, v.fit)
+
+##########################
+require(maptools)
+#county <- st_read("UScounties/UScounties.shp",quiet = TRUE)
+USpoly = readShapeSpatial("UScounties.shp", proj4string = CRS(ll2))
+require(rgdal)
+aea = "+proj=aea +lat_1=23 +lat_2=30 +lat_0=26, +lon_0=-83 +units=m"
+US = spTransform(comb_rain, CRS(aea))
+USpoly = spTransform(USpoly, CRS(aea))
+
+l3 = list("sp.polygons", USpoly, lwd = 0.3, first = FALSE)
+spplot(comb_rain, "precip_max", sp.layout = l3)
+
+require(maptools)
+county <- st_read("UScounties.shp",quiet = TRUE)
+
+county$fips <- county$FIPS
+sample_rain <- merge(county, comb_rain, by.y = "fips")
+
+st_write(sample_rain, ".", "select_states", 
+         driver = "ESRI Shapefile")
+
+Spoly = readShapeSpatial("select_states.shp", proj4string = CRS(ll2))
+##########################
+
+grd = spsample(Spoly, n = 5000, type = "regular")
+grd = as(grd, "SpatialPixels")
+ipl = krige(precip_max ~ 1, comb_rain, newdata = grd, model = v.fit)
+spplot(ipl, "var1.pred", col.regions = rev(topo.colors(20)), sp.layout = l3)
+```
+
+```{R}
+library(maps)
+library(mapproj)
+library(mapdata)
+library(rgeos)
+library(maptools)
+library(sp)
+library(raster)
+library(rgdal)
+
+# us0 <- getData('GADM', country="USA", level=0)
+  us1 <- getData('GADM', country="USA", level=1)
+# us2 <- getData('GADM', country="USA", level=2)
+plot(us1)              # state boundaries split at 
+                       # the dateline
+us1$NAME_1             # returns names of the states + DC
+spplot(us1,"ID_1")
+spplot(us1,"NAME_1")  # color codes states and
+                       # provides their names
+```
+
+```{r}
+library(leaflet)
+library(htmltools)
+bouys_name<-c('42001','42002','42035','42019','42007','42040',
+              '42020','42039','42036')
+
+url1 <- "http://www.ndbc.noaa.gov/view_text_file.php?filename="
+url2 <- ".txt.gz&dir=data/historical/stdmet/"
+urls <- str_c(url1, bouys_name,"h2008", url2, sep = "")
+
+bouys_lat<-c(25.942,26.055,29.232,27.910,30.090,29.207,
+             26.968,28.787,28.501)
+bouys_long<-c(89.657,93.646,94.413,95.345,88.769,88.237,
+              96.693,86.007,84.508)
+
+
+dat.frame<-data.frame(Name=bouys_name,Lat=bouys_lat,Long=bouys_long*-1)
+
+leaflet(dat.frame) %>% addTiles() %>%
+  addMarkers(~Long, ~Lat, popup = ~htmlEscape(Name))
+```
+
+```{r}
+for(i in 1:9){
+  suppressMessages(
+    bouy_table <- read_table(urls[i], col_names = TRUE))
+  bouy_table <- bouy_table[-1,]
+  bouy_table$DATE <- paste0(bouy_table$`#YY`,'-',bouy_table$MM,'-',bouy_table$DD)
+  bouy_table$DATE <- as.Date(bouy_table$DATE)
+  
+  bouy_sub <- bouy_table %>% filter(DATE >= '2008-09-9' & DATE <= '2008-09-18')
+  bouy_sub$WSPD <- as.numeric(bouy_sub$WSPD)
+  
+  bouy_sub$TIME <- paste0(bouy_sub$DATE,' ',bouy_sub$hh,":",bouy_sub$mm,':00' )
+  bouy_sub$TIME <- as.POSIXct(bouy_sub$TIME)
+  
+  if(i==1)
+    bouy_data<-data.frame(TIME=bouy_sub$TIME,WSPD=bouy_sub$WSPD)
+  else{
+    tmp<-data.frame(TIME=bouy_sub$TIME,WSPD=bouy_sub$WSPD)
+    bouy_data<-left_join(bouy_data,tmp,by="TIME")
+    }
+}
+  
+colnames(bouy_data)<- c('TIME', bouys_name)
+for(i in 2:10)
+  for(j in 1:240){
+    if(is.na(bouy_data[j,i])){
+      jtmp=j+1
+      while(is.na(bouy_data[jtmp,i])) jtmp<-jtmp+1
+      bouy_data[j,i]<-mean(bouy_data[j-1,i],bouy_data[jtmp,i])
+      
+    }
+  }
+bouy_data
+
+B42001<- xts(x=bouy_data$`42001`, order.by=bouy_data$TIME)
+B42002<- xts(x=bouy_data$`42002`, order.by=bouy_data$TIME)
+B42035<- xts(x=bouy_data$`42035`, order.by=bouy_data$TIME)
+B42019<- xts(x=bouy_data$`42019`, order.by=bouy_data$TIME)
+B42007<- xts(x=bouy_data$`42007`, order.by=bouy_data$TIME)
+B42040<- xts(x=bouy_data$`42040`, order.by=bouy_data$TIME)
+B42020<- xts(x=bouy_data$`42020`, order.by=bouy_data$TIME)
+B42039<- xts(x=bouy_data$`42039`, order.by=bouy_data$TIME)
+B42036<- xts(x=bouy_data$`42036`, order.by=bouy_data$TIME)
+Buoy<- cbind(B42001,B42002,B42035,B42019,B42007,B42040,B42020,B42039,B42036)
+
+dygraph(Buoy,main = "Hurricane wind speed observed by buoys") %>%
+  dyOptions(stackedGraph = TRUE) %>%
+  dyRangeSelector(height = 20)
+
+library(dygraphs)
+dygraph(Buoy) %>%
+  dyOptions(stackedGraph = TRUE) %>%
+  dyRangeSelector(height = 20)
+```
+
+```{r}
+urb_anim = tm_shape(world) + tm_polygons() + 
+  tm_shape(urban_agglomerations) + tm_dots(size = "population_millions") +
+  tm_facets(along = "year", free.coords = FALSE)
+```
+
+```{r}
+library(tmap)
+pacman::p_load(rgeos, rgdal, ggmap, leaflet)
+tmap_mode("view")
+plot<- tm_shape(World)+tm_polygons("HPI", palette="-Blues", contrast=.7, id="name", title="Happiness Index")+tmap_mode("view")
+plot
+
+tranbouy<-t(bouy_data)
+colnames(tranbouy)<-tranbouy[1,]
+tranbouy<-tranbouy[-1,]
+tranbouy<-cbind(Name=row.names(tranbouy),tranbouy)
+tranbouy<-data.frame(tranbouy)
+buoytime<-left_join(dat.frame,tranbouy,by='Name')
+for(i in 4:243)
+buoytime[,i]<-as.numeric(buoytime[,i])
+class(buoytime)
+
+plot <- tmap_leaflet(buoytime, mode = "view", show = FALSE) 
+  #setView(1249033,2682288,zoom=11)%>% 
+  #fitBounds(-72, 40, -70, 43)%>% 
+  #clearBounds() %>%
+  #tm_dots(size = "population_millions") +
+  #tm_facets(along = "year", free.coords = FALSE)
+#pacman::p_load(htmlwidgets)
+#saveWidget(tmap_EFH, file="tmap_EFH_anz.html")
+plot
+```
+
+```{r}
+library(shiny)
+library(dplyr)
+library(plotly)
+library(shinydashboard)
+library(RColorBrewer)
+library(maps)
+library(tigris)
+library(leaflet)
+options(tigris_use_cache = TRUE)
+library(magrittr)
+library(rvest)
+library(reshape2)
+#library(ggiraph)
+library(RColorBrewer)
+library(geojsonio)
+library(shinyWidgets)
+library(shinythemes)
+#library(systemfonts)
+library(tidyverse)
+library(drat)
+library(hurricaneexposuredata)
+library(hurricaneexposure)
+library(leaflet)
+library(htmltools)
+library(stringr)
+library(dygraphs)
+library(xts)
+library(geoR)
+require(sp)
+library(gstat)
+library(sf)
+
+#add data
+addRepo("geanders")
+data("hurr_tracks")
+data("rain")
+##########
+#data manipulation
+buoys_name<-c('42001','42002','42035','42019','42007','42040',
+              '42020','42039','42036')
+buoys_lat<-c(25.942,26.055,29.232,27.910,30.090,29.207,
+             26.968,28.787,28.501)
+buoys_long<-c(89.657,93.646,94.413,95.345,88.769,88.237,
+              96.693,86.007,84.508)
+
+buoys <- data.frame(Name=buoys_name,Lat = buoys_lat,Long = buoys_long*-1, Speed=1)
+
+#create bouys data
+url1 <- "http://www.ndbc.noaa.gov/view_text_file.php?filename="
+url2 <- ".txt.gz&dir=data/historical/stdmet/"
+urls <- str_c(url1, buoys_name,"h2008", url2, sep = "")
+
+
+for(i in 1:9){
+  suppressMessages(
+    buoy_table <- read_table(urls[i], col_names = TRUE))
+  #get rid of first row
+  buoy_table <- buoy_table[-1,]
+  buoy_table$DATE <- paste0(buoy_table$`#YY`,'-',buoy_table$MM,'-',buoy_table$DD)
+  buoy_table$DATE <- as.Date(buoy_table$DATE)
+  
+  buoy_sub <- buoy_table %>% filter(DATE >= '2008-09-09' & DATE <= '2008-09-18')
+  buoy_sub$WSPD <- as.numeric(buoy_sub$WSPD)
+  
+  buoy_sub$TIME <- paste0(buoy_sub$DATE,' ',buoy_sub$hh,":",buoy_sub$mm,':00' )
+  buoy_sub$TIME <- as.POSIXct(buoy_sub$TIME, tz = 'UTC')
+  tmp <- data.frame(TIME=buoy_sub$TIME, WSPD=buoy_sub$WSPD)
+  if(i==1)
+    buoy_data<-data.frame(TIME=buoy_sub$TIME,WSPD=buoy_sub$WSPD)
+  else{
+    tmp <-data.frame(TIME=buoy_sub$TIME,WSPD=buoy_sub$WSPD)
+    buoy_data<- left_join(buoy_data,tmp,by="TIME")
+  }
+}
+
+colnames(buoy_data)<- c('TIME', buoys_name)
+
+#filling missing values using mean
+for(i in 2:10)
+  for(j in 1:nrow(buoy_data)){
+    if(is.na(buoy_data[j,i])){
+      jtmp=j+1
+      while(is.na(buoy_data[jtmp,i])) jtmp<-jtmp+1
+      buoy_data[j,i]<-mean(buoy_data[j-1,i],buoy_data[jtmp,i])
+      
+    }
+  }
+
+#pivot longer
+buoy_data2 <- buoy_data %>% pivot_longer(2:10, names_to = 'buoys', values_to = 'wind')
+
+buoy_geo <- merge(buoy_data2, buoys, by.x = 'buoys', by.y = 'Name')
+
+
+```
+
+```{r}
+v = variogram(precip_max ~ 1, data=comb_rain)
+plot(v)
+show.vgms()
+
+vmi = vgm(model='Gau', psill=0.006, range=1000*0.005,nugget=0.003)
+v.fit = fit.variogram(v, vmi)
+v.fit
+
+
+#try from lag = 0
+comb_rain <- comb_rain %>% filter(lag == 0)
+coordinates(comb_rain) = c('longitude', 'latitude')
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(comb_rain) = CRS(ll2)
+comb_rain$precip_max = comb_rain$precip_max /10
+summary(comb_rain$precip_max)
+
+
+v = variogram(precip_max ~ 1, data=comb_rain)
+par(las = 1)
+plot(v$dist/1000, v$gamma, xlab = "Lagged distance (h) [km]", 
+     ylab = expression(paste("Semivariance (", gamma, ") [", cm^2, "]")), las = 1, 
+     pch = 19) +
+grid()+
+points(v$dist/1000, v$gamma, pch = 19)+
+text(v$dist/1000, v$gamma, pos = 1, labels = as.character(v$np), cex = 0.5)
+
+
+show.vgms()
+
+vmi = vgm(model='Gau', psill=6, range=1000*4,nugget=1)
+v.fit = fit.variogram(v, vmi)
+v.fit
+plot(v, v.fit)
+
+
+vmi = vgm(model='Sph', psill=6, range=1000*4,nugget=1)
+v.fit = fit.variogram(v, vmi)
+v.fit
+plot(v, v.fit)
+
+##########################
+```
+
+```{r}
+library(DT)
+buoy_geo1 <- buoy_geo[,-6]
+buoy_geo1$TIME <- as.character(buoy_geo1$TIME)
+datatable(buoy_geo1,options = list(pageLength = 5))
+
+#############################
+data('county_centers')
+#rain data
+rain_dat <- rain %>% filter(storm_id == 'Ike-2008')
+
+rain <- merge(rain_dat, county_centers, by = 'fips', all.x = TRUE)
+datatable(rain,options = list(pageLength = 11))
+```
